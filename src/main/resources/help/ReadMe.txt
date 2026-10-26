@@ -1,1 +1,1 @@
-Important Informations for the developers
+Important Informationsgit  for the developers
