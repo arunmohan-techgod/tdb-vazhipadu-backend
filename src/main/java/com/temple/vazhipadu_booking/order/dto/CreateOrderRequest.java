@@ -25,7 +25,9 @@ public record CreateOrderRequest(
     LocalDate offeringDate,
 
     @NotEmpty(message = "At least one offering is required")
-    List<@Valid OrderItemRequest> items
+    List<@Valid OrderItemRequest> items,
+    
+    Long templeId
 ) {
     public record OrderItemRequest(
         @NotNull(message = "Offering ID is required")

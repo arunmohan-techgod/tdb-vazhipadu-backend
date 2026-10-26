@@ -101,7 +101,8 @@ public class OrderService {
             request.phoneNumber().trim(),
             request.nakshatra().trim(),
             request.offeringDate(),
-            total
+            total,
+            request.templeId()
         );
 
         for (var item : request.items()) {
@@ -187,7 +188,7 @@ public class OrderService {
                     item.getQuantity(),
                     item.getUnitPrice(),
                     item.getUnitPrice().multiply(
-                        BigDecimal.valueOf(item.getQuantity()))
+                        BigDecimal.valueOf(item.getQuantity())),1l
                 ))
                 .toList();
 
@@ -198,7 +199,7 @@ public class OrderService {
             order.getNakshatra(),
             order.getOfferingDate(),
             items,
-            order.getTotal()
+            order.getTotal(), 1l
         );
     }
     
@@ -235,6 +236,34 @@ public class OrderService {
 
         return orderRepository.findAll(specification, pageable)
             .map(this::toResponse);
+    }
+    
+    @Transactional
+    public TempleOrder cancelOrder(Long orderId) {
+        TempleOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Order not found: " + orderId));
+
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            return order; // Idempotent cancellation
+        }
+
+        // Lock offerings in a consistent order, as in P3.
+        order.getItems().stream()
+                .map(item -> item.getOffering().getId())
+                .distinct()
+                .sorted()
+                .forEach(offeringId ->
+                        offeringRepository.findByIdForUpdate(offeringId)
+                                .orElseThrow(() ->
+                                        new ResourceNotFoundException(
+                                                "Offering not found: "
+                                                        + offeringId)));
+
+        order.setStatus(OrderStatus.CANCELLED);
+
+        return orderRepository.save(order);
     }
 }
 

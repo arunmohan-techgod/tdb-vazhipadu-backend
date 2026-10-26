@@ -11,14 +11,16 @@ public record OrderResponse(
     String nakshatra,
     LocalDate offeringDate,
     List<ItemResponse> items,
-    BigDecimal total
+    BigDecimal total,
+    Long templeId
 ) {
     public record ItemResponse(
         Long offeringId,
         String offeringName,
         int quantity,
         BigDecimal unitPrice,
-        BigDecimal lineTotal
+        BigDecimal lineTotal,
+        Long templeId
     ) {}
 }
 
