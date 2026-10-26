@@ -83,7 +83,7 @@ class DailyLimitConcurrencyTest {
                                 new CreateOrderRequest.OrderItemRequest(
                                     offeringId, 1
                                 )
-                            )
+                            ),1l
                         );
 
                     try {
