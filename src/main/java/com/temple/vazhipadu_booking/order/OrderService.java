@@ -2,8 +2,11 @@ package com.temple.vazhipadu_booking.order;
 
 	
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,6 +15,12 @@ import com.temple.vazhipadu_booking.offering.Offering;
 import com.temple.vazhipadu_booking.offering.OfferingRepository;
 import com.temple.vazhipadu_booking.order.dto.CreateOrderRequest;
 import com.temple.vazhipadu_booking.order.dto.OrderResponse;
+import com.temple.vazhipadu_booking.order.entity.OrderStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
 @Service
 public class OrderService {
@@ -100,6 +109,41 @@ public class OrderService {
             items,
             order.getTotal()
         );
+    }
+    
+    public Page<OrderResponse> searchOrders(
+            Long templeId,
+            LocalDate offeringDate,
+            OrderStatus status,
+            String phoneNumber,
+            int page,
+            int size) {
+
+        if (page < 0) {
+            throw new IllegalArgumentException(
+                "Page number cannot be negative"
+            );
+        }
+
+        if (size < 1 || size > 100) {
+            throw new IllegalArgumentException(
+                "Page size must be between 1 and 100"
+            );
+        }
+
+        Specification<TempleOrder> specification =
+            OrderSpecifications.search(
+                templeId, offeringDate, status, phoneNumber
+            );
+
+        var pageable = PageRequest.of(
+            page,
+            size,
+            Sort.by(Sort.Direction.ASC, "id")
+        );
+
+        return orderRepository.findAll(specification, pageable)
+            .map(this::toResponse);
     }
 }
 
