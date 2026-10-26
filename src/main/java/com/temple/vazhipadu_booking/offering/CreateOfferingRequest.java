@@ -14,6 +14,9 @@ public record CreateOfferingRequest(
     BigDecimal price,
 
     @NotNull(message = "Active flag is required")
-    Boolean active
+    Boolean active,
+    
+    @Positive(message = "Daily limit must be greater than zero")
+    Integer dailyLimit
 ) {}
 

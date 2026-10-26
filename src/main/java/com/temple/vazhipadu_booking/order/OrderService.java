@@ -3,9 +3,14 @@ package com.temple.vazhipadu_booking.order;
 	
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,11 +21,6 @@ import com.temple.vazhipadu_booking.offering.OfferingRepository;
 import com.temple.vazhipadu_booking.order.dto.CreateOrderRequest;
 import com.temple.vazhipadu_booking.order.dto.OrderResponse;
 import com.temple.vazhipadu_booking.order.entity.OrderStatus;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 
 @Service
 public class OrderService {
@@ -33,27 +33,68 @@ public class OrderService {
         this.orderRepository = orderRepository;
         this.offeringRepository = offeringRepository;
     }
-
+    
     @Transactional
     public OrderResponse create(CreateOrderRequest request) {
-        BigDecimal total = BigDecimal.ZERO;
+        // Aggregate quantities in case an offering appears more than once.
+        Map<Long, Integer> requestedQuantities = new TreeMap<>();
 
-        // Validate every offering and calculate the total on the server.
         for (var item : request.items()) {
+            if (item.quantity() < 1) {
+                throw new IllegalArgumentException(
+                    "Quantity must be positive"
+                );
+            }
+
+            requestedQuantities.merge(
+                item.offeringId(), item.quantity(), Integer::sum
+            );
+        }
+
+        // Lock each offering in a consistent order.
+        Map<Long, Offering> offerings = new HashMap<>();
+
+        for (Long offeringId : requestedQuantities.keySet()) {
             Offering offering = offeringRepository
-                .findById(item.offeringId())
+                .findByIdForUpdate(offeringId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                    "Offering not found: " + item.offeringId()));
+                    "Offering not found: " + offeringId
+                ));
 
             if (!offering.isActive()) {
                 throw new IllegalArgumentException(
-                    "Offering is inactive: " + offering.getName());
+                    "Offering is inactive: " + offering.getName()
+                );
             }
 
-            total = total.add(
-                offering.getPrice()
-                    .multiply(BigDecimal.valueOf(item.quantity())));
+            offerings.put(offeringId, offering);
         }
+
+        // Check daily limits while holding the offering locks.
+        for (var entry : requestedQuantities.entrySet()) {
+            Offering offering = offerings.get(entry.getKey());
+            Integer limit = offering.getDailyLimit();
+
+            if (limit == null) {
+                continue; // Unlimited offering
+            }
+
+            long booked = orderRepository.sumBookedQuantity(
+                offering.getId(),
+                request.offeringDate(),
+                OrderStatus.CANCELLED
+            );
+
+            if (booked + entry.getValue() > limit) {
+                throw new IllegalArgumentException(
+                    "Daily limit exceeded for offering: "
+                        + offering.getName()
+                );
+            }
+        }
+
+        // Build the order only after all capacity checks pass.
+        BigDecimal total = BigDecimal.ZERO;
 
         TempleOrder order = new TempleOrder(
             request.devoteeName().trim(),
@@ -63,20 +104,70 @@ public class OrderService {
             total
         );
 
-        // Build order items using database prices, not client prices.
         for (var item : request.items()) {
-            Offering offering = offeringRepository
-                .findById(item.offeringId())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                    "Offering not found: " + item.offeringId()));
+            Offering offering = offerings.get(item.offeringId());
+
+            total = total.add(
+                offering.getPrice().multiply(
+                    BigDecimal.valueOf(item.quantity())
+                )
+            );
 
             order.addItem(new OrderItem(
-                offering, item.quantity(), offering.getPrice()));
+                offering, item.quantity(), offering.getPrice()
+            ));
         }
+
+        // Ensure the order total matches its items.
+        order.setTotal(total);
 
         TempleOrder saved = orderRepository.save(order);
         return toResponse(saved);
     }
+
+//    @Transactional
+//    public OrderResponse create(CreateOrderRequest request) {
+//        BigDecimal total = BigDecimal.ZERO;
+//
+//        // Validate every offering and calculate the total on the server.
+//        for (var item : request.items()) {
+//            Offering offering = offeringRepository
+//                .findById(item.offeringId())
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                    "Offering not found: " + item.offeringId()));
+//
+//            if (!offering.isActive()) {
+//                throw new IllegalArgumentException(
+//                    "Offering is inactive: " + offering.getName());
+//            }
+//
+//            total = total.add(
+//                offering.getPrice()
+//                    .multiply(BigDecimal.valueOf(item.quantity())));
+//        }
+//
+//        TempleOrder order = new TempleOrder(
+//            request.devoteeName().trim(),
+//            request.phoneNumber().trim(),
+//            request.nakshatra().trim(),
+//            request.offeringDate(),
+//            total
+//        );
+//
+//        // Build order items using database prices, not client prices.
+//        for (var item : request.items()) {
+//            Offering offering = offeringRepository
+//                .findById(item.offeringId())
+//                .orElseThrow(() -> new ResourceNotFoundException(
+//                    "Offering not found: " + item.offeringId()));
+//
+//            order.addItem(new OrderItem(
+//                offering, item.quantity(), offering.getPrice()));
+//        }
+//
+//        TempleOrder saved = orderRepository.save(order);
+//        return toResponse(saved);
+//    }
 
     @Transactional(readOnly = true)
     public OrderResponse getById(Long id) {

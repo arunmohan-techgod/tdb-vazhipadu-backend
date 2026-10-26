@@ -78,4 +78,8 @@ public class TempleOrder {
     public LocalDate getOfferingDate() { return offeringDate; }
     public BigDecimal getTotal() { return total; }
     public List<OrderItem> getItems() { return items; }
+
+	public void setTotal(BigDecimal total2) {
+		this.total=total2;
+	}
 }
