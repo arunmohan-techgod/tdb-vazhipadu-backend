@@ -19,6 +19,22 @@ public class Offering {
 
     @Column(nullable = false)
     private boolean active;
+    
+    @Column(name = "daily_limit")
+    private Integer dailyLimit; // null means unlimited
+
+    public Integer getDailyLimit() {
+        return dailyLimit;
+    }
+
+    public void setDailyLimit(Integer dailyLimit) {
+        if (dailyLimit != null && dailyLimit < 1) {
+            throw new IllegalArgumentException(
+                "Daily limit must be positive"
+            );
+        }
+        this.dailyLimit = dailyLimit;
+    }
 
     protected Offering() {
     }
@@ -27,6 +43,13 @@ public class Offering {
         this.name = name;
         this.price = price;
         this.active = active;
+    }
+    
+    public Offering(String name, BigDecimal price, boolean active,Integer dailyLimit) {
+        this.name = name;
+        this.price = price;
+        this.active = active;
+        this.dailyLimit=dailyLimit;
     }
 
     public Long getId() { return id; }

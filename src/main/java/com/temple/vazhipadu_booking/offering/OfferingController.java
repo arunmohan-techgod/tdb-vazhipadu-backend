@@ -27,7 +27,7 @@ public class OfferingController {
         }
 
         return repository.save(
-            new Offering(name, request.price(), request.active()));
+            new Offering(name, request.price(), request.active(),request.dailyLimit()));
     }
 
     @GetMapping
